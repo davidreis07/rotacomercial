@@ -20,7 +20,7 @@ export default async function PlanejamentoPage() {
 
   const { data: clientes, error: clientesError } = await supabase
     .from("clientes")
-    .select("id, codigo, nome, nome_fantasia, bairro, endereco")
+    .select("id, codigo, nome, nome_fantasia, bairro, endereco, numero, complemento, latitude, longitude")
     .order("nome", { ascending: true });
 
   const { data: planejamento, error: planejamentoError } = await supabase

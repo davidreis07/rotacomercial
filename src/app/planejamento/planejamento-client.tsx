@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import MapaRota, { type PontoRota } from "./mapa-rota";
 
 interface Cliente {
     id: string;
@@ -12,6 +13,10 @@ interface Cliente {
     nome_fantasia: string | null;
     bairro: string | null;
     endereco: string | null;
+    numero: string | null;
+    complemento: string | null;
+    latitude: number | null;
+    longitude: number | null;
 }
 
 interface PlanejamentoItem {
@@ -51,7 +56,10 @@ export default function PlanejamentoClient({
     const [globalErro, setGlobalErro] = useState<string | null>(null);
 
     // Dicionário de clientes para consulta imediata por ID
-    const clientesMap = new Map(initialClientes.map((c) => [c.id, c]));
+    const clientesMap = useMemo(
+        () => new Map(initialClientes.map((c) => [c.id, c])),
+        [initialClientes]
+    );
 
     // Clientes planejados na data de hoje
     const clientesPlanejadosIds = new Set(planejamentoList.map((p) => p.cliente_id));
@@ -267,6 +275,57 @@ export default function PlanejamentoClient({
     const restantes = totalPlanejado - concluidos - cancelados;
     const pct = totalPlanejado > 0 ? Math.round((concluidos / totalPlanejado) * 100) : 0;
 
+    const pontosRota = useMemo<PontoRota[]>(() => {
+        return planejamentoList.flatMap((item, index) => {
+            const cliente = clientesMap.get(item.cliente_id);
+
+            if (
+                !cliente ||
+                cliente.latitude === null ||
+                cliente.longitude === null ||
+                !Number.isFinite(cliente.latitude) ||
+                !Number.isFinite(cliente.longitude) ||
+                cliente.latitude < -90 ||
+                cliente.latitude > 90 ||
+                cliente.longitude < -180 ||
+                cliente.longitude > 180
+            ) {
+                return [];
+            }
+
+            return [{
+                clienteId: cliente.id,
+                posicao: index + 1,
+                nome: cliente.nome_fantasia || cliente.nome,
+                codigo: cliente.codigo,
+                bairro: cliente.bairro,
+                endereco: [cliente.endereco, cliente.numero, cliente.complemento]
+                    .filter(Boolean)
+                    .join(", ") || null,
+                status: item.status,
+                latitude: cliente.latitude,
+                longitude: cliente.longitude,
+            }];
+        });
+    }, [planejamentoList, clientesMap]);
+
+    const clientesSemLocalizacao = planejamentoList.flatMap((item) => {
+        const cliente = clientesMap.get(item.cliente_id);
+        const temLocalizacaoValida =
+            cliente?.latitude !== null &&
+            cliente?.latitude !== undefined &&
+            cliente?.longitude !== null &&
+            cliente?.longitude !== undefined &&
+            Number.isFinite(cliente.latitude) &&
+            Number.isFinite(cliente.longitude) &&
+            cliente.latitude >= -90 &&
+            cliente.latitude <= 90 &&
+            cliente.longitude >= -180 &&
+            cliente.longitude <= 180;
+
+        return cliente && !temLocalizacaoValida ? [cliente] : [];
+    });
+
     return (
         <div className="mt-6 space-y-8">
             {globalErro && (
@@ -315,6 +374,39 @@ export default function PlanejamentoClient({
                     </div>
                 </section>
             )}
+
+            {/* MAPA DA ROTA */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                <div>
+                    <h2 className="text-lg font-bold text-slate-900">Mapa da rota</h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                        Os pontos seguem a ordem manual da lista. A linha indica apenas a sequência aproximada.
+                    </p>
+                </div>
+
+                {clientesSemLocalizacao.length > 0 && (
+                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                        <p>
+                            {clientesSemLocalizacao.length} {clientesSemLocalizacao.length === 1 ? "cliente da rota ainda não possui" : "clientes da rota ainda não possuem"} localização cadastrada.
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                            {clientesSemLocalizacao.map((cliente) => (
+                                <Link
+                                    key={cliente.id}
+                                    href={`/clientes/${cliente.id}/editar`}
+                                    className="font-semibold underline underline-offset-2"
+                                >
+                                    Cadastrar: {cliente.nome_fantasia || cliente.nome}
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div className="mt-4">
+                    <MapaRota pontos={pontosRota} />
+                </div>
+            </section>
 
             {/* SEÇÃO 1: MINHA ROTA DE HOJE */}
             <section>
@@ -454,6 +546,22 @@ export default function PlanejamentoClient({
                                             >
                                                 Ver Ficha
                                             </Link>
+
+                                            {cliente.latitude !== null &&
+                                                cliente.longitude !== null &&
+                                                cliente.latitude >= -90 &&
+                                                cliente.latitude <= 90 &&
+                                                cliente.longitude >= -180 &&
+                                                cliente.longitude <= 180 && (
+                                                    <a
+                                                        href={`https://www.google.com/maps/dir/?api=1&destination=${cliente.latitude},${cliente.longitude}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex h-9 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 text-center"
+                                                    >
+                                                        Abrir navegação
+                                                    </a>
+                                                )}
 
                                             {/* Remover da Rota */}
                                             <button
