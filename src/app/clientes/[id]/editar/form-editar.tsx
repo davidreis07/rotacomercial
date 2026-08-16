@@ -109,8 +109,24 @@ export function FormEditarCliente({ cliente }: { cliente: Cliente }) {
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
 
-        setLoading(true);
         setErro("");
+
+        const coordenadasIncompletas =
+            (latitude === null) !== (longitude === null);
+        const coordenadasInvalidas =
+            latitude !== null &&
+            longitude !== null &&
+            (latitude < -90 ||
+                latitude > 90 ||
+                longitude < -180 ||
+                longitude > 180);
+
+        if (coordenadasIncompletas || coordenadasInvalidas) {
+            setErro("As coordenadas de localização são inválidas. Capture a localização novamente.");
+            return;
+        }
+
+        setLoading(true);
 
         const supabase = createClient();
 

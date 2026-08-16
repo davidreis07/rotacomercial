@@ -37,7 +37,9 @@ export default async function ClientePage({
         numero,
         complemento,
         telefone,
-        observacoes
+        observacoes,
+        latitude,
+        longitude
       `
         )
         .eq("id", id)
@@ -181,6 +183,29 @@ export default async function ClientePage({
                                 </div>
                             ) : (
                                 <p className="mt-1 text-slate-400 italic text-sm">Não informado</p>
+                            )}
+                        </div>
+
+                        {/* Localização */}
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                Localização
+                            </p>
+                            {cliente.latitude !== null && cliente.longitude !== null ? (
+                                <div className="mt-1">
+                                    <p className="font-medium text-emerald-700">
+                                        Localização cadastrada
+                                    </p>
+                                    <p className="mt-0.5 text-sm text-slate-600">
+                                        Latitude: {cliente.latitude.toFixed(6)}
+                                        <span className="mx-1.5 text-slate-300">•</span>
+                                        Longitude: {cliente.longitude.toFixed(6)}
+                                    </p>
+                                </div>
+                            ) : (
+                                <p className="mt-1 text-sm italic text-slate-400">
+                                    Localização ainda não cadastrada
+                                </p>
                             )}
                         </div>
 
