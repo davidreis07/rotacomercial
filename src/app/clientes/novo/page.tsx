@@ -15,6 +15,10 @@ export default function NovoClientePage() {
   const [endereco, setEndereco] = useState("");
   const [numero, setNumero] = useState("");
   const [complemento, setComplemento] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [estado, setEstado] = useState("");
+  const [cep, setCep] = useState("");
+  const [pais, setPais] = useState("BR");
   const [telefone, setTelefone] = useState("");
   const [observacoes, setObservacoes] = useState("");
 
@@ -24,8 +28,24 @@ export default function NovoClientePage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    setLoading(true);
     setErro("");
+
+    if (estado && !/^[A-Z]{2}$/.test(estado)) {
+      setErro("Informe a UF com duas letras.");
+      return;
+    }
+
+    if (cep && !/^\d{8}$/.test(cep)) {
+      setErro("Informe o CEP com oito números.");
+      return;
+    }
+
+    if (pais && !/^[A-Z]{2}$/.test(pais)) {
+      setErro("Informe o país com duas letras.");
+      return;
+    }
+
+    setLoading(true);
 
     const supabase = createClient();
 
@@ -49,6 +69,10 @@ export default function NovoClientePage() {
       endereco: endereco.trim() || null,
       numero: numero.trim() || null,
       complemento: complemento.trim() || null,
+      cidade: cidade.trim() || null,
+      estado: estado.trim().toUpperCase() || null,
+      cep: cep.replace(/\D/g, "") || null,
+      pais: pais.trim().toUpperCase() || "BR",
       telefone: telefone.trim() || null,
       observacoes: observacoes.trim() || null,
     });
@@ -210,6 +234,65 @@ export default function NovoClientePage() {
                 onChange={(event) => setComplemento(event.target.value)}
                 placeholder="Quadra, loja..."
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="cidade" className="mb-2 block text-sm font-medium text-slate-700">
+                Cidade
+              </label>
+              <input
+                id="cidade"
+                value={cidade}
+                onChange={(event) => setCidade(event.target.value)}
+                placeholder="Ex.: São Luís"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="estado" className="mb-2 block text-sm font-medium text-slate-700">
+                Estado / UF
+              </label>
+              <input
+                id="estado"
+                value={estado}
+                onChange={(event) => setEstado(event.target.value.toUpperCase().slice(0, 2))}
+                maxLength={2}
+                placeholder="MA"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 uppercase text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="cep" className="mb-2 block text-sm font-medium text-slate-700">
+                CEP
+              </label>
+              <input
+                id="cep"
+                inputMode="numeric"
+                value={cep}
+                onChange={(event) => setCep(event.target.value.replace(/\D/g, "").slice(0, 8))}
+                maxLength={8}
+                placeholder="65000000"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="pais" className="mb-2 block text-sm font-medium text-slate-700">
+                País
+              </label>
+              <input
+                id="pais"
+                value={pais}
+                onChange={(event) => setPais(event.target.value.toUpperCase().slice(0, 2))}
+                maxLength={2}
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 uppercase text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </div>
           </div>

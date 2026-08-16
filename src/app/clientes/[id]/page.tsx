@@ -36,10 +36,18 @@ export default async function ClientePage({
         endereco,
         numero,
         complemento,
+        cidade,
+        estado,
+        cep,
+        pais,
         telefone,
         observacoes,
         latitude,
-        longitude
+        longitude,
+        localizacao_origem,
+        localizacao_atualizada_em,
+        geocodificacao_precisao,
+        geocodificacao_provider
       `
         )
         .eq("id", id)
@@ -180,6 +188,17 @@ export default async function ClientePage({
                                             {cliente.bairro}
                                         </p>
                                     )}
+                                    {(cliente.cidade || cliente.estado) && (
+                                        <p className="text-sm text-slate-600">
+                                            {[cliente.cidade, cliente.estado].filter(Boolean).join(" / ")}
+                                        </p>
+                                    )}
+                                    {cliente.cep && (
+                                        <p className="text-sm text-slate-600">
+                                            CEP {cliente.cep.replace(/^(\d{5})(\d{3})$/, "$1-$2")}
+                                            {cliente.pais ? ` · ${cliente.pais}` : ""}
+                                        </p>
+                                    )}
                                 </div>
                             ) : (
                                 <p className="mt-1 text-slate-400 italic text-sm">Não informado</p>
@@ -201,6 +220,18 @@ export default async function ClientePage({
                                         <span className="mx-1.5 text-slate-300">•</span>
                                         Longitude: {cliente.longitude.toFixed(6)}
                                     </p>
+                                    {cliente.localizacao_origem && (
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            Origem: {cliente.localizacao_origem === "gps" ? "GPS" : "Geocodificação"}
+                                            {cliente.geocodificacao_precisao ? ` · Precisão: ${cliente.geocodificacao_precisao}` : ""}
+                                            {cliente.geocodificacao_provider ? ` · Provedor: ${cliente.geocodificacao_provider}` : ""}
+                                        </p>
+                                    )}
+                                    {cliente.localizacao_atualizada_em && (
+                                        <p className="mt-0.5 text-xs text-slate-400">
+                                            Atualizada em {formatarData(cliente.localizacao_atualizada_em)}
+                                        </p>
+                                    )}
                                 </div>
                             ) : (
                                 <p className="mt-1 text-sm italic text-slate-400">
