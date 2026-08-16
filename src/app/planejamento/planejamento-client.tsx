@@ -1,0 +1,475 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
+
+interface Cliente {
+    id: string;
+    codigo: string | null;
+    nome: string;
+    nome_fantasia: string | null;
+    bairro: string | null;
+    endereco: string | null;
+}
+
+interface PlanejamentoItem {
+    id: string;
+    cliente_id: string;
+    ordem: number;
+    status: string;
+}
+
+interface VisitaInfo {
+    visitado_em: string;
+    necessidade: string | null;
+}
+
+type Props = {
+    initialClientes: Cliente[];
+    initialPlanejamento: PlanejamentoItem[];
+    ultimasVisitas: Record<string, VisitaInfo>;
+    data: string;
+    userId: string;
+};
+
+export default function PlanejamentoClient({
+    initialClientes,
+    initialPlanejamento,
+    ultimasVisitas,
+    data: dataString,
+    userId,
+}: Props) {
+    const router = useRouter();
+    const supabase = createClient();
+
+    const [planejamentoList, setPlanejamentoList] = useState<PlanejamentoItem[]>(
+        [...initialPlanejamento].sort((a, b) => a.ordem - b.ordem)
+    );
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [globalErro, setGlobalErro] = useState<string | null>(null);
+
+    // Dicionário de clientes para consulta imediata por ID
+    const clientesMap = new Map(initialClientes.map((c) => [c.id, c]));
+
+    // Clientes planejados na data de hoje
+    const clientesPlanejadosIds = new Set(planejamentoList.map((p) => p.cliente_id));
+
+    // Clientes disponíveis para adicionar (não planejados hoje)
+    const clientesDisponiveis = initialClientes.filter(
+        (c) => !clientesPlanejadosIds.has(c.id)
+    );
+
+    // Formatar data da visita
+    function formatarDataVisita(dataIso: string) {
+        try {
+            return new Intl.DateTimeFormat("pt-BR", {
+                dateStyle: "short",
+                timeStyle: "short",
+                timeZone: "America/Fortaleza",
+            }).format(new Date(dataIso));
+        } catch {
+            return "Data inválida";
+        }
+    }
+
+    // Ação: Adicionar cliente à rota do dia
+    async function handleAdicionar(clienteId: string) {
+        setActionLoading(`add-${clienteId}`);
+        setGlobalErro(null);
+
+        const nextOrdem = (planejamentoList.length > 0
+            ? Math.max(...planejamentoList.map((p) => p.ordem))
+            : 0) + 1;
+
+        const { data, error } = await supabase
+            .from("planejamento")
+            .insert({
+                user_id: userId,
+                cliente_id: clienteId,
+                data: dataString,
+                ordem: nextOrdem,
+                status: "planejado",
+            })
+            .select()
+            .single();
+
+        if (error) {
+            console.error("Erro ao adicionar cliente ao planejamento:", error);
+            setGlobalErro("Erro ao adicionar cliente. Tente novamente.");
+            setActionLoading(null);
+            return;
+        }
+
+        const novoItem: PlanejamentoItem = {
+            id: data.id,
+            cliente_id: data.cliente_id,
+            ordem: data.ordem,
+            status: data.status,
+        };
+
+        setPlanejamentoList((prev) => [...prev, novoItem].sort((a, b) => a.ordem - b.ordem));
+        setActionLoading(null);
+        router.refresh();
+    }
+
+    // Ação: Remover cliente do planejamento de hoje
+    async function handleRemover(item: PlanejamentoItem) {
+        setActionLoading(`remove-${item.id}`);
+        setGlobalErro(null);
+
+        const { error } = await supabase
+            .from("planejamento")
+            .delete()
+            .eq("id", item.id);
+
+        if (error) {
+            console.error("Erro ao remover do planejamento:", error);
+            setGlobalErro("Erro ao remover da rota. Tente novamente.");
+            setActionLoading(null);
+            return;
+        }
+
+        // Reorganizar ordens restantes
+        const restante = planejamentoList.filter((p) => p.id !== item.id);
+        const atualizados = restante.map((p) => {
+            if (p.ordem > item.ordem) {
+                return { ...p, ordem: p.ordem - 1 };
+            }
+            return p;
+        });
+
+        // Executar updates em lote para ajustar ordens no banco
+        const updatesNoBanco = restante
+            .filter((p) => p.ordem > item.ordem)
+            .map((p) =>
+                supabase
+                    .from("planejamento")
+                    .update({ ordem: p.ordem - 1 })
+                    .eq("id", p.id)
+            );
+
+        if (updatesNoBanco.length > 0) {
+            const resultados = await Promise.all(updatesNoBanco);
+            const algumErro = resultados.some((res) => res.error);
+            if (algumErro) {
+                console.warn(
+                    "Alguns erros ocorreram ao reordenar planejamento no banco após remoção."
+                );
+            }
+        }
+
+        setPlanejamentoList(atualizados.sort((a, b) => a.ordem - b.ordem));
+        setActionLoading(null);
+        router.refresh();
+    }
+
+    // Ação: Mover ordem para cima (Trocar com item anterior)
+    async function handleMoverCima(index: number) {
+        if (index <= 0) return;
+
+        const itemA = planejamentoList[index];
+        const itemB = planejamentoList[index - 1];
+
+        setActionLoading(`move-${itemA.id}`);
+        setGlobalErro(null);
+
+        const ordemA = itemA.ordem;
+        const ordemB = itemB.ordem;
+
+        // Atualização paralela no banco
+        const [resA, resB] = await Promise.all([
+            supabase.from("planejamento").update({ ordem: ordemB }).eq("id", itemA.id),
+            supabase.from("planejamento").update({ ordem: ordemA }).eq("id", itemB.id),
+        ]);
+
+        if (resA.error || resB.error) {
+            console.error("Erro ao reordenar no Supabase:", resA.error || resB.error);
+            setGlobalErro("Erro ao reordenar rota. Tente novamente.");
+            setActionLoading(null);
+            return;
+        }
+
+        // Atualizar estado local
+        const listaClonada = [...planejamentoList];
+        listaClonada[index] = { ...itemA, ordem: ordemB };
+        listaClonada[index - 1] = { ...itemB, ordem: ordemA };
+
+        setPlanejamentoList(listaClonada.sort((a, b) => a.ordem - b.ordem));
+        setActionLoading(null);
+        router.refresh();
+    }
+
+    // Ação: Mover ordem para baixo (Trocar com item posterior)
+    async function handleMoverBaixo(index: number) {
+        if (index >= planejamentoList.length - 1) return;
+
+        const itemA = planejamentoList[index];
+        const itemB = planejamentoList[index + 1];
+
+        setActionLoading(`move-${itemA.id}`);
+        setGlobalErro(null);
+
+        const ordemA = itemA.ordem;
+        const ordemB = itemB.ordem;
+
+        // Atualização paralela no banco
+        const [resA, resB] = await Promise.all([
+            supabase.from("planejamento").update({ ordem: ordemB }).eq("id", itemA.id),
+            supabase.from("planejamento").update({ ordem: ordemA }).eq("id", itemB.id),
+        ]);
+
+        if (resA.error || resB.error) {
+            console.error("Erro ao reordenar no Supabase:", resA.error || resB.error);
+            setGlobalErro("Erro ao reordenar rota. Tente novamente.");
+            setActionLoading(null);
+            return;
+        }
+
+        // Atualizar estado local
+        const listaClonada = [...planejamentoList];
+        listaClonada[index] = { ...itemA, ordem: ordemB };
+        listaClonada[index + 1] = { ...itemB, ordem: ordemA };
+
+        setPlanejamentoList(listaClonada.sort((a, b) => a.ordem - b.ordem));
+        setActionLoading(null);
+        router.refresh();
+    }
+
+    // Retorna a cor com base no status da visita/planejado
+    function getStatusBadge(status: string) {
+        switch (status) {
+            case "visitado":
+                return (
+                    <span className="rounded-lg bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 uppercase">
+                        Visitado
+                    </span>
+                );
+            case "cancelado":
+                return (
+                    <span className="rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 uppercase">
+                        Cancelado
+                    </span>
+                );
+            default:
+                return (
+                    <span className="rounded-lg bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 uppercase">
+                        Planejado
+                    </span>
+                );
+        }
+    }
+
+    return (
+        <div className="mt-6 space-y-8">
+            {globalErro && (
+                <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
+                    {globalErro}
+                </div>
+            )}
+
+            {/* SEÇÃO 1: MINHA ROTA DE HOJE */}
+            <section>
+                <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-2">
+                    <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        📍 Minha rota de hoje
+                        <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
+                            {planejamentoList.length}
+                        </span>
+                    </h2>
+                </div>
+
+                {planejamentoList.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+                        <p className="text-sm font-medium text-slate-500">
+                            Nenhum cliente na rota de hoje.
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                            Adicione clientes disponíveis na seção abaixo para montar sua rotina.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {planejamentoList.map((item, index) => {
+                            const cliente = clientesMap.get(item.cliente_id);
+                            if (!cliente) return null;
+
+                            const ultimaVisita = ultimasVisitas[cliente.id];
+                            const loading = actionLoading === `move-${item.id}` || actionLoading === `remove-${item.id}`;
+
+                            return (
+                                <article
+                                    key={item.id}
+                                    className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 ${loading ? "opacity-60 cursor-not-allowed" : ""
+                                        }`}
+                                >
+                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                        {/* Informações do Cliente Planejado */}
+                                        <div className="flex-1 space-y-2">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white shrink-0">
+                                                    {index + 1}
+                                                </span>
+                                                <h3 className="font-semibold text-slate-900">
+                                                    {cliente.nome_fantasia || cliente.nome}
+                                                </h3>
+                                                {cliente.codigo && (
+                                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                                                        {cliente.codigo}
+                                                    </span>
+                                                )}
+                                                {getStatusBadge(item.status)}
+                                            </div>
+
+                                            {/* Endereço */}
+                                            <div className="text-xs text-slate-500 space-y-0.5">
+                                                {cliente.bairro && (
+                                                    <p className="font-medium text-slate-700">
+                                                        Bairro: {cliente.bairro}
+                                                    </p>
+                                                )}
+                                                {cliente.endereco && (
+                                                    <p>Endereço: {cliente.endereco}</p>
+                                                )}
+                                            </div>
+
+                                            {/* Informações de Visita */}
+                                            {ultimaVisita ? (
+                                                <div className="rounded-xl bg-slate-50 p-3 mt-2 border border-slate-100">
+                                                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                                        Último atendimento
+                                                    </p>
+                                                    <p className="text-xs font-semibold text-slate-700 mt-0.5">
+                                                        {formatarDataVisita(ultimaVisita.visitado_em)}
+                                                    </p>
+                                                    {ultimaVisita.necessidade && (
+                                                        <p className="text-xs text-slate-600 mt-1 italic">
+                                                            &quot;Necessidade: {ultimaVisita.necessidade}&quot;
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-slate-400 italic">
+                                                    Nenhuma visita anterior registrada.
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {/* Ações da Rota */}
+                                        <div className="flex flex-wrap gap-2 items-center sm:flex-col sm:items-stretch sm:justify-start shrink-0">
+                                            {/* Botões Mover */}
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleMoverCima(index)}
+                                                    disabled={index === 0 || loading}
+                                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white"
+                                                    title="Mover para cima"
+                                                >
+                                                    ▲
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleMoverBaixo(index)}
+                                                    disabled={index === planejamentoList.length - 1 || loading}
+                                                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white"
+                                                    title="Mover para baixo"
+                                                >
+                                                    ▼
+                                                </button>
+                                            </div>
+
+                                            {/* Ir para Ficha do Cliente */}
+                                            <Link
+                                                href={`/clientes/${cliente.id}`}
+                                                className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 text-center"
+                                            >
+                                                Ver Ficha
+                                            </Link>
+
+                                            {/* Remover da Rota */}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemover(item)}
+                                                disabled={loading}
+                                                className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 px-3 text-[11px] font-bold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                                            >
+                                                {actionLoading === `remove-${item.id}` ? "Saindo..." : "Remover Rota"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </article>
+                            );
+                        })}
+                    </div>
+                )}
+            </section>
+
+            {/* SEÇÃO 2: CLIENTES DISPONÍVEIS */}
+            <section>
+                <div className="mb-4 border-b border-slate-200 pb-2">
+                    <h2 className="text-lg font-bold text-slate-900">
+                        👥 Clientes disponíveis
+                    </h2>
+                </div>
+
+                {clientesDisponiveis.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
+                        <p className="text-sm text-slate-500 italic">
+                            Nenhum cliente disponível ou todos já foram adicionados à rota.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {clientesDisponiveis.map((cliente) => {
+                            const loading = actionLoading === `add-${cliente.id}`;
+
+                            return (
+                                <article
+                                    key={cliente.id}
+                                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                                >
+                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <h3 className="font-semibold text-slate-900">
+                                                    {cliente.nome_fantasia || cliente.nome}
+                                                </h3>
+                                                {cliente.codigo && (
+                                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                                                        {cliente.codigo}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="text-xs text-slate-500 mt-1.5 space-y-0.5">
+                                                {cliente.bairro && (
+                                                    <p className="font-medium text-slate-700">
+                                                        Bairro: {cliente.bairro}
+                                                    </p>
+                                                )}
+                                                {cliente.endereco && (
+                                                    <p>Endereço: {cliente.endereco}</p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => handleAdicionar(cliente.id)}
+                                            disabled={loading}
+                                            className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50 sm:w-auto shrink-0"
+                                        >
+                                            {loading ? "Adicionando..." : "+ Adicionar à rota"}
+                                        </button>
+                                    </div>
+                                </article>
+                            );
+                        })}
+                    </div>
+                )}
+            </section>
+        </div>
+    );
+}

@@ -1,0 +1,8 @@
+﻿
+C:\Projetos\rotacomercial\src\app\planejamento\planejamento-client.tsx
+   72:18   warning  'e' is defined but never used                                    @typescript-eslint/no-unused-vars
+  348:61   error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  348:101  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+Ô£û 3 problems (2 errors, 1 warning)
+
