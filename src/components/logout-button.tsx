@@ -13,10 +13,15 @@ export function LogoutButton() {
 
         const supabase = createClient();
 
-        await supabase.auth.signOut();
+        const { error } = await supabase.auth.signOut();
+
+        if (error) {
+            console.error("Erro ao sair:", error);
+            setLoading(false);
+            return;
+        }
 
         router.replace("/login");
-        router.refresh();
     }
 
     return (
