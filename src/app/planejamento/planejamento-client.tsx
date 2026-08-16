@@ -243,13 +243,13 @@ export default function PlanejamentoClient({
             case "visitado":
                 return (
                     <span className="rounded-lg bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 uppercase">
-                        Visitado
+                        ✓ Visitado
                     </span>
                 );
             case "cancelado":
                 return (
                     <span className="rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 uppercase">
-                        Cancelado
+                        ✗ Cancelado
                     </span>
                 );
             default:
@@ -261,12 +261,59 @@ export default function PlanejamentoClient({
         }
     }
 
+    const totalPlanejado = planejamentoList.length;
+    const concluidos = planejamentoList.filter((p) => p.status === "visitado").length;
+    const cancelados = planejamentoList.filter((p) => p.status === "cancelado").length;
+    const restantes = totalPlanejado - concluidos - cancelados;
+    const pct = totalPlanejado > 0 ? Math.round((concluidos / totalPlanejado) * 100) : 0;
+
     return (
         <div className="mt-6 space-y-8">
             {globalErro && (
                 <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
                     {globalErro}
                 </div>
+            )}
+
+            {/* PROGRESS SUMMARY CARD */}
+            {totalPlanejado > 0 && (
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 mb-6">
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                        Progresso do dia
+                    </h2>
+                    <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
+                        <span className="text-2xl font-bold text-slate-900">
+                            {concluidos} de {totalPlanejado} visitas concluídas
+                        </span>
+                        <span className="text-sm font-semibold text-slate-500">
+                            {pct}% completo
+                        </span>
+                    </div>
+
+                    {/* Progress Bar Container */}
+                    <div className="mt-4 w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200">
+                        <div
+                            className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
+                            style={{ width: `${pct}%` }}
+                        />
+                    </div>
+
+                    {/* Counters */}
+                    <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs text-slate-600">
+                        <div className="rounded-xl bg-slate-50 p-2.5">
+                            <span className="block text-base font-bold text-slate-900">{totalPlanejado}</span>
+                            Total Planejado
+                        </div>
+                        <div className="rounded-xl bg-green-50 p-2.5">
+                            <span className="block text-base font-bold text-green-700">{concluidos}</span>
+                            Concluídos
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-2.5">
+                            <span className="block text-base font-bold text-slate-700">{restantes}</span>
+                            Restantes
+                        </div>
+                    </div>
+                </section>
             )}
 
             {/* SEÇÃO 1: MINHA ROTA DE HOJE */}
@@ -298,10 +345,20 @@ export default function PlanejamentoClient({
                             const ultimaVisita = ultimasVisitas[cliente.id];
                             const loading = actionLoading === `move-${item.id}` || actionLoading === `remove-${item.id}`;
 
+                            const isCompleted = item.status === "visitado";
+                            const isCancelled = item.status === "cancelado";
+
+                            let cardStatusClasses = "border-slate-200 bg-white";
+                            if (isCompleted) {
+                                cardStatusClasses = "border-green-200 bg-green-50/10";
+                            } else if (isCancelled) {
+                                cardStatusClasses = "border-red-100 bg-red-50/5 opacity-70";
+                            }
+
                             return (
                                 <article
                                     key={item.id}
-                                    className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 ${loading ? "opacity-60 cursor-not-allowed" : ""
+                                    className={`rounded-2xl border p-4 shadow-sm transition hover:shadow-md ${cardStatusClasses} ${loading ? "opacity-60 cursor-not-allowed" : ""
                                         }`}
                                 >
                                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -358,6 +415,16 @@ export default function PlanejamentoClient({
 
                                         {/* Ações da Rota */}
                                         <div className="flex flex-wrap gap-2 items-center sm:flex-col sm:items-stretch sm:justify-start shrink-0">
+                                            {/* Registrar Visita (Apenas se status for planejado) */}
+                                            {item.status === "planejado" && (
+                                                <Link
+                                                    href={`/clientes/${cliente.id}/visitas/nova?origem=planejamento`}
+                                                    className="inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white transition hover:bg-blue-700 text-center"
+                                                >
+                                                    Registrar visita
+                                                </Link>
+                                            )}
+
                                             {/* Botões Mover */}
                                             <div className="flex gap-2">
                                                 <button

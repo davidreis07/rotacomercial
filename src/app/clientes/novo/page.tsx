@@ -105,7 +105,7 @@ export default function NovoClientePage() {
               value={codigo}
               onChange={(event) => setCodigo(event.target.value)}
               placeholder="Ex.: 3405976"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
 
@@ -123,7 +123,7 @@ export default function NovoClientePage() {
               onChange={(event) => setNome(event.target.value)}
               required
               placeholder="Nome do cliente"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
 
@@ -140,7 +140,7 @@ export default function NovoClientePage() {
               value={nomeFantasia}
               onChange={(event) => setNomeFantasia(event.target.value)}
               placeholder="Ex.: Mercadinho São José"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
 
@@ -157,7 +157,7 @@ export default function NovoClientePage() {
               value={bairro}
               onChange={(event) => setBairro(event.target.value)}
               placeholder="Ex.: Cohab"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
 
@@ -174,7 +174,7 @@ export default function NovoClientePage() {
               value={endereco}
               onChange={(event) => setEndereco(event.target.value)}
               placeholder="Rua, avenida..."
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
 
@@ -192,7 +192,7 @@ export default function NovoClientePage() {
                 value={numero}
                 onChange={(event) => setNumero(event.target.value)}
                 placeholder="Ex.: 125"
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </div>
 
@@ -209,7 +209,7 @@ export default function NovoClientePage() {
                 value={complemento}
                 onChange={(event) => setComplemento(event.target.value)}
                 placeholder="Quadra, loja..."
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </div>
           </div>
@@ -228,7 +228,7 @@ export default function NovoClientePage() {
               value={telefone}
               onChange={(event) => setTelefone(event.target.value)}
               placeholder="(98) 99999-9999"
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
 
@@ -246,7 +246,7 @@ export default function NovoClientePage() {
               onChange={(event) => setObservacoes(event.target.value)}
               rows={4}
               placeholder="Informações importantes sobre o cliente..."
-              className="w-full resize-none rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full resize-none rounded-xl border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
 

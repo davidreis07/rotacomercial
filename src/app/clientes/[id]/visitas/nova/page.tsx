@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function NovaVisitaPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const origem = searchParams.get("origem");
 
   const clienteId = params.id;
 
@@ -57,7 +59,24 @@ export default function NovaVisitaPage() {
       return;
     }
 
-    router.push(`/clientes/${clienteId}`);
+    if (origem === "planejamento") {
+      const hoje = new Date().toLocaleDateString("en-CA", {
+        timeZone: "America/Fortaleza",
+      });
+      const { error: updateError } = await supabase
+        .from("planejamento")
+        .update({ status: "visitado" })
+        .eq("user_id", user.id)
+        .eq("cliente_id", clienteId)
+        .eq("data", hoje);
+
+      if (updateError) {
+        console.error("Erro ao atualizar status do planejamento:", updateError);
+      }
+      router.push("/planejamento");
+    } else {
+      router.push(`/clientes/${clienteId}`);
+    }
     router.refresh();
   }
 
@@ -65,10 +84,10 @@ export default function NovaVisitaPage() {
     <main className="min-h-screen bg-slate-50 p-4 sm:p-6">
       <div className="mx-auto max-w-2xl">
         <Link
-          href={`/clientes/${clienteId}`}
+          href={origem === "planejamento" ? "/planejamento" : `/clientes/${clienteId}`}
           className="text-sm font-medium text-blue-600 hover:underline"
         >
-          ← Voltar para o cliente
+          {origem === "planejamento" ? "← Voltar para a rota" : "← Voltar para o cliente"}
         </Link>
 
         <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">

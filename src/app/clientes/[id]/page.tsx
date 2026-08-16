@@ -68,16 +68,10 @@ export default async function ClientePage({
     }
 
     const historico = visitas ?? [];
-
-    // Como ordenamos da mais recente para a mais antiga,
-    // a primeira posição é a última visita realizada.
     const ultimaVisita = historico[0] ?? null;
 
-    const enderecoCompleto = [
-        cliente.endereco,
-        cliente.numero,
-        cliente.complemento,
-    ]
+    // Monta endereço linha por linha
+    const linhaEndereco = [cliente.endereco, cliente.numero, cliente.complemento]
         .filter(Boolean)
         .join(", ");
 
@@ -101,76 +95,110 @@ export default async function ClientePage({
 
                 {/* FICHA DO CLIENTE */}
                 <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div>
-                            <p className="text-sm font-semibold text-blue-600">
-                                RotaComercial
+                    {/* Cabeçalho da ficha */}
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                                Dados do cliente
                             </p>
 
-                            <h1 className="mt-1 text-2xl font-bold text-slate-900">
+                            <h1 className="mt-1 text-2xl font-bold text-slate-900 leading-tight">
                                 {cliente.nome_fantasia || cliente.nome}
                             </h1>
 
                             {cliente.nome_fantasia && (
-                                <p className="mt-1 text-sm text-slate-500">
+                                <p className="mt-0.5 text-sm text-slate-500">
                                     {cliente.nome}
                                 </p>
                             )}
+
+                            {cliente.codigo && (
+                                <span className="mt-2 inline-block rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                                    Código {cliente.codigo}
+                                </span>
+                            )}
                         </div>
 
-                        {cliente.codigo && (
-                            <span className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-medium text-slate-600">
-                                Código {cliente.codigo}
-                            </span>
-                        )}
+                        <Link
+                            href={`/clientes/${cliente.id}/editar`}
+                            className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                        >
+                            Editar
+                        </Link>
                     </div>
 
-                    <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                Bairro
-                            </p>
+                    {/* Informações de contato e localização */}
+                    <div className="mt-6 space-y-4 border-t border-slate-100 pt-5">
 
-                            <p className="mt-1 font-medium text-slate-800">
-                                {cliente.bairro || "Não informado"}
-                            </p>
-                        </div>
-
+                        {/* Telefone */}
                         <div>
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                                 Telefone
                             </p>
-
-                            <p className="mt-1 font-medium text-slate-800">
-                                {cliente.telefone || "Não informado"}
-                            </p>
+                            {cliente.telefone ? (
+                                <a
+                                    href={`tel:${cliente.telefone.replace(/\D/g, "")}`}
+                                    className="mt-1 inline-flex items-center gap-2 font-medium text-blue-600 hover:underline"
+                                >
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        className="h-4 w-4"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                        strokeWidth={2}
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                        />
+                                    </svg>
+                                    {cliente.telefone}
+                                </a>
+                            ) : (
+                                <p className="mt-1 text-slate-400 italic text-sm">Não informado</p>
+                            )}
                         </div>
-                    </div>
 
-                    <div className="mt-5">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                            Endereço
-                        </p>
-
-                        <p className="mt-1 text-slate-800">
-                            {enderecoCompleto || "Não informado"}
-                        </p>
-                    </div>
-
-                    {cliente.observacoes && (
-                        <div className="mt-5">
+                        {/* Endereço */}
+                        <div>
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                Observações
+                                Endereço
                             </p>
-
-                            <p className="mt-1 whitespace-pre-wrap text-slate-700">
-                                {cliente.observacoes}
-                            </p>
+                            {linhaEndereco || cliente.bairro ? (
+                                <div className="mt-1 space-y-0.5">
+                                    {linhaEndereco && (
+                                        <p className="font-medium text-slate-800">
+                                            {linhaEndereco}
+                                        </p>
+                                    )}
+                                    {cliente.bairro && (
+                                        <p className="text-sm text-slate-600">
+                                            {cliente.bairro}
+                                        </p>
+                                    )}
+                                </div>
+                            ) : (
+                                <p className="mt-1 text-slate-400 italic text-sm">Não informado</p>
+                            )}
                         </div>
-                    )}
+
+                        {/* Observações */}
+                        {cliente.observacoes && (
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                    Observações
+                                </p>
+                                <p className="mt-1 whitespace-pre-wrap text-slate-700">
+                                    {cliente.observacoes}
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </section>
 
-                {/* RESUMO DA ÚLTIMA VISITA */}
+                {/* ÚLTIMA VISITA */}
                 <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                         Última visita
@@ -206,21 +234,9 @@ export default async function ClientePage({
                             </div>
                         </>
                     ) : (
-                        <>
-                            <p className="mt-2 font-medium text-slate-800">
-                                Nenhuma visita registrada
-                            </p>
-
-                            <div className="mt-5">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                    Necessidade / oportunidade
-                                </p>
-
-                                <p className="mt-2 text-slate-500">
-                                    Nenhuma necessidade registrada.
-                                </p>
-                            </div>
-                        </>
+                        <p className="mt-2 text-sm text-slate-500">
+                            Nenhuma visita registrada para este cliente.
+                        </p>
                     )}
 
                     <Link
