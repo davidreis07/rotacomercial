@@ -61,6 +61,7 @@ export default function NovoClientePage() {
     }
 
     const { error } = await supabase.from("clientes").insert({
+      id: crypto.randomUUID(),
       user_id: user.id,
       codigo: codigo.trim() || null,
       nome: nome.trim(),

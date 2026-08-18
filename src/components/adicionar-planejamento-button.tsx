@@ -49,6 +49,7 @@ export function AdicionarPlanejamentoButton({
         const { error } = await supabase
             .from("planejamento")
             .insert({
+                id: crypto.randomUUID(),
                 user_id: user.id,
                 cliente_id: clienteId,
                 data,

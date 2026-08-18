@@ -10,6 +10,7 @@ export default function NovaVisitaPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const origem = searchParams.get("origem");
+  const planejamentoId = searchParams.get("planejamentoId");
 
   const clienteId = params.id;
 
@@ -39,14 +40,26 @@ export default function NovaVisitaPage() {
       return;
     }
 
-    const { error } = await supabase.from("visitas").insert({
-      user_id: user.id,
-      cliente_id: clienteId,
-      visitado_em: new Date().toISOString(),
-      resultado: resultado.trim() || null,
-      necessidade: necessidade.trim() || null,
-      observacoes: observacoes.trim() || null,
-    });
+    if (origem === "planejamento" && !planejamentoId) {
+      setErro("Não foi possível identificar a parada da rota.");
+      setLoading(false);
+      return;
+    }
+
+    const { error } = await supabase.rpc(
+      "registrar_visita_e_concluir_planejamento",
+      {
+        p_operation_id: crypto.randomUUID(),
+        p_visita_id: crypto.randomUUID(),
+        p_cliente_id: clienteId,
+        p_visitado_em: new Date().toISOString(),
+        p_resultado: resultado.trim() || null,
+        p_necessidade: necessidade.trim() || null,
+        p_observacoes: observacoes.trim() || null,
+        p_planejamento_id:
+          origem === "planejamento" ? planejamentoId : null,
+      }
+    );
 
     if (error) {
       console.error("Erro ao registrar visita:", error);
@@ -60,19 +73,6 @@ export default function NovaVisitaPage() {
     }
 
     if (origem === "planejamento") {
-      const hoje = new Date().toLocaleDateString("en-CA", {
-        timeZone: "America/Fortaleza",
-      });
-      const { error: updateError } = await supabase
-        .from("planejamento")
-        .update({ status: "visitado" })
-        .eq("user_id", user.id)
-        .eq("cliente_id", clienteId)
-        .eq("data", hoje);
-
-      if (updateError) {
-        console.error("Erro ao atualizar status do planejamento:", updateError);
-      }
       router.push("/planejamento");
     } else {
       router.push(`/clientes/${clienteId}`);

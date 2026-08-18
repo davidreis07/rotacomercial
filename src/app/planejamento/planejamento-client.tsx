@@ -94,6 +94,7 @@ export default function PlanejamentoClient({
         const { data, error } = await supabase
             .from("planejamento")
             .insert({
+                id: crypto.randomUUID(),
                 user_id: userId,
                 cliente_id: clienteId,
                 data: dataString,
@@ -127,10 +128,19 @@ export default function PlanejamentoClient({
         setActionLoading(`remove-${item.id}`);
         setGlobalErro(null);
 
-        const { error } = await supabase
-            .from("planejamento")
-            .delete()
-            .eq("id", item.id);
+        const { data: rotaEstado, error: versaoError } = await supabase
+            .from("rota_estado")
+            .select("version")
+            .eq("data", dataString)
+            .single();
+
+        const { error } = versaoError || !rotaEstado
+            ? { error: versaoError ?? new Error("Versão da rota indisponível") }
+            : await supabase.rpc("remover_planejamento", {
+                p_operation_id: crypto.randomUUID(),
+                p_planejamento_id: item.id,
+                p_expected_version: rotaEstado.version,
+            });
 
         if (error) {
             console.error("Erro ao remover do planejamento:", error);
@@ -148,26 +158,6 @@ export default function PlanejamentoClient({
             return p;
         });
 
-        // Executar updates em lote para ajustar ordens no banco
-        const updatesNoBanco = restante
-            .filter((p) => p.ordem > item.ordem)
-            .map((p) =>
-                supabase
-                    .from("planejamento")
-                    .update({ ordem: p.ordem - 1 })
-                    .eq("id", p.id)
-            );
-
-        if (updatesNoBanco.length > 0) {
-            const resultados = await Promise.all(updatesNoBanco);
-            const algumErro = resultados.some((res) => res.error);
-            if (algumErro) {
-                console.warn(
-                    "Alguns erros ocorreram ao reordenar planejamento no banco após remoção."
-                );
-            }
-        }
-
         setPlanejamentoList(atualizados.sort((a, b) => a.ordem - b.ordem));
         setActionLoading(null);
         router.refresh();
@@ -183,28 +173,34 @@ export default function PlanejamentoClient({
         setActionLoading(`move-${itemA.id}`);
         setGlobalErro(null);
 
-        const ordemA = itemA.ordem;
-        const ordemB = itemB.ordem;
+        const novaLista = [...planejamentoList];
+        [novaLista[index - 1], novaLista[index]] = [itemA, itemB];
 
-        // Atualização paralela no banco
-        const [resA, resB] = await Promise.all([
-            supabase.from("planejamento").update({ ordem: ordemB }).eq("id", itemA.id),
-            supabase.from("planejamento").update({ ordem: ordemA }).eq("id", itemB.id),
-        ]);
+        const { data: rotaEstado, error: versaoError } = await supabase
+            .from("rota_estado")
+            .select("version")
+            .eq("data", dataString)
+            .single();
 
-        if (resA.error || resB.error) {
-            console.error("Erro ao reordenar no Supabase:", resA.error || resB.error);
+        const { error } = versaoError || !rotaEstado
+            ? { error: versaoError ?? new Error("Versão da rota indisponível") }
+            : await supabase.rpc("reordenar_rota", {
+                p_operation_id: crypto.randomUUID(),
+                p_data: dataString,
+                p_expected_version: rotaEstado.version,
+                p_ordered_ids: novaLista.map((item) => item.id),
+            });
+
+        if (error) {
+            console.error("Erro ao reordenar no Supabase:", error);
             setGlobalErro("Erro ao reordenar rota. Tente novamente.");
             setActionLoading(null);
             return;
         }
 
-        // Atualizar estado local
-        const listaClonada = [...planejamentoList];
-        listaClonada[index] = { ...itemA, ordem: ordemB };
-        listaClonada[index - 1] = { ...itemB, ordem: ordemA };
-
-        setPlanejamentoList(listaClonada.sort((a, b) => a.ordem - b.ordem));
+        setPlanejamentoList(
+            novaLista.map((item, itemIndex) => ({ ...item, ordem: itemIndex + 1 }))
+        );
         setActionLoading(null);
         router.refresh();
     }
@@ -219,28 +215,34 @@ export default function PlanejamentoClient({
         setActionLoading(`move-${itemA.id}`);
         setGlobalErro(null);
 
-        const ordemA = itemA.ordem;
-        const ordemB = itemB.ordem;
+        const novaLista = [...planejamentoList];
+        [novaLista[index], novaLista[index + 1]] = [itemB, itemA];
 
-        // Atualização paralela no banco
-        const [resA, resB] = await Promise.all([
-            supabase.from("planejamento").update({ ordem: ordemB }).eq("id", itemA.id),
-            supabase.from("planejamento").update({ ordem: ordemA }).eq("id", itemB.id),
-        ]);
+        const { data: rotaEstado, error: versaoError } = await supabase
+            .from("rota_estado")
+            .select("version")
+            .eq("data", dataString)
+            .single();
 
-        if (resA.error || resB.error) {
-            console.error("Erro ao reordenar no Supabase:", resA.error || resB.error);
+        const { error } = versaoError || !rotaEstado
+            ? { error: versaoError ?? new Error("Versão da rota indisponível") }
+            : await supabase.rpc("reordenar_rota", {
+                p_operation_id: crypto.randomUUID(),
+                p_data: dataString,
+                p_expected_version: rotaEstado.version,
+                p_ordered_ids: novaLista.map((item) => item.id),
+            });
+
+        if (error) {
+            console.error("Erro ao reordenar no Supabase:", error);
             setGlobalErro("Erro ao reordenar rota. Tente novamente.");
             setActionLoading(null);
             return;
         }
 
-        // Atualizar estado local
-        const listaClonada = [...planejamentoList];
-        listaClonada[index] = { ...itemA, ordem: ordemB };
-        listaClonada[index + 1] = { ...itemB, ordem: ordemA };
-
-        setPlanejamentoList(listaClonada.sort((a, b) => a.ordem - b.ordem));
+        setPlanejamentoList(
+            novaLista.map((item, itemIndex) => ({ ...item, ordem: itemIndex + 1 }))
+        );
         setActionLoading(null);
         router.refresh();
     }
@@ -510,7 +512,7 @@ export default function PlanejamentoClient({
                                             {/* Registrar Visita (Apenas se status for planejado) */}
                                             {item.status === "planejado" && (
                                                 <Link
-                                                    href={`/clientes/${cliente.id}/visitas/nova?origem=planejamento`}
+                                                    href={`/clientes/${cliente.id}/visitas/nova?origem=planejamento&planejamentoId=${item.id}`}
                                                     className="inline-flex h-9 items-center justify-center rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white transition hover:bg-blue-700 text-center"
                                                 >
                                                     Registrar visita
