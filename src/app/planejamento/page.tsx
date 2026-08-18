@@ -25,9 +25,15 @@ export default async function PlanejamentoPage() {
 
   const { data: planejamento, error: planejamentoError } = await supabase
     .from("planejamento")
-    .select("id, cliente_id, ordem, status")
+    .select("id, user_id, cliente_id, data, ordem, status, version, updated_at")
     .eq("data", hoje)
     .order("ordem", { ascending: true });
+
+  const { data: rotaEstado } = await supabase
+    .from("rota_estado")
+    .select("version")
+    .eq("data", hoje)
+    .maybeSingle();
 
   const plannedClientIds = planejamento?.map((p) => p.cliente_id) || [];
   const ultimasVisitas: Record<string, { visitado_em: string; necessidade: string | null }> = {};
@@ -88,6 +94,7 @@ export default async function PlanejamentoPage() {
             ultimasVisitas={ultimasVisitas}
             data={hoje}
             userId={user.id}
+            initialRouteVersion={rotaEstado?.version ?? 1}
           />
         )}
       </div>

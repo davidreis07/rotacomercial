@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { getMetadata, getUserEntities } from "@/lib/offline/db";
+import type { LocalEntity } from "@/lib/offline/types";
 
 interface Cliente {
     id: string;
@@ -13,8 +15,35 @@ interface Cliente {
     telefone: string | null;
 }
 
-export function ClientesClient({ clientes }: { clientes: Cliente[] }) {
+type LocalCliente = LocalEntity & Cliente;
+
+export function ClientesClient({
+    clientes: initialClientes,
+    userId,
+}: {
+    clientes: Cliente[];
+    userId: string;
+}) {
     const [busca, setBusca] = useState("");
+    const [clientes, setClientes] = useState(initialClientes);
+
+    useEffect(() => {
+        async function carregarLocal() {
+            const local = await getUserEntities<LocalCliente>("clientes", userId);
+            const initialized = await getMetadata<number>(`cursor:${userId}`);
+            if (local.length > 0 || initialized !== null) {
+                setClientes(local.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")));
+            }
+        }
+
+        void carregarLocal();
+        window.addEventListener("rotacomercial:local-data-changed", carregarLocal);
+        window.addEventListener("rotacomercial:outbox-changed", carregarLocal);
+        return () => {
+            window.removeEventListener("rotacomercial:local-data-changed", carregarLocal);
+            window.removeEventListener("rotacomercial:outbox-changed", carregarLocal);
+        };
+    }, [userId]);
 
     const termo = busca.trim().toLowerCase();
 

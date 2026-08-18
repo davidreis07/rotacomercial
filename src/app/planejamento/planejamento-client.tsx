@@ -1,10 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import {
+    queueEntityDelete,
+    queueEntityMutation,
+    queueRouteMutation,
+} from "@/lib/offline/mutations";
 import MapaRota, { type PontoRota } from "./mapa-rota";
+import { getMetadata, getUserEntities } from "@/lib/offline/db";
+import type { LocalEntity } from "@/lib/offline/types";
 
 interface Cliente {
     id: string;
@@ -21,9 +27,13 @@ interface Cliente {
 
 interface PlanejamentoItem {
     id: string;
+    user_id: string;
     cliente_id: string;
+    data: string;
     ordem: number;
     status: string;
+    version: number;
+    updated_at: string;
 }
 
 interface VisitaInfo {
@@ -37,6 +47,7 @@ type Props = {
     ultimasVisitas: Record<string, VisitaInfo>;
     data: string;
     userId: string;
+    initialRouteVersion: number;
 };
 
 export default function PlanejamentoClient({
@@ -45,27 +56,62 @@ export default function PlanejamentoClient({
     ultimasVisitas,
     data: dataString,
     userId,
+    initialRouteVersion,
 }: Props) {
     const router = useRouter();
-    const supabase = createClient();
-
     const [planejamentoList, setPlanejamentoList] = useState<PlanejamentoItem[]>(
         [...initialPlanejamento].sort((a, b) => a.ordem - b.ordem)
     );
+    const [clientesList, setClientesList] = useState(initialClientes);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [globalErro, setGlobalErro] = useState<string | null>(null);
 
+    async function getRouteVersion() {
+        return (
+            (await getMetadata<number>(`route-version:${userId}:${dataString}`)) ??
+            initialRouteVersion
+        );
+    }
+
+    useEffect(() => {
+        async function carregarLocal() {
+            const [clientesLocais, planejamentoLocal] = await Promise.all([
+                getUserEntities<LocalEntity & Cliente>("clientes", userId),
+                getUserEntities<LocalEntity & PlanejamentoItem>("planejamento", userId),
+            ]);
+            const initialized = await getMetadata<number>(`cursor:${userId}`);
+            if (clientesLocais.length > 0 || initialized !== null) {
+                setClientesList(clientesLocais);
+            }
+            if (planejamentoLocal.length > 0 || initialized !== null) {
+                setPlanejamentoList(
+                    planejamentoLocal
+                        .filter((item) => item.data === dataString)
+                        .sort((a, b) => a.ordem - b.ordem)
+                );
+            }
+        }
+
+        void carregarLocal();
+        window.addEventListener("rotacomercial:local-data-changed", carregarLocal);
+        window.addEventListener("rotacomercial:outbox-changed", carregarLocal);
+        return () => {
+            window.removeEventListener("rotacomercial:local-data-changed", carregarLocal);
+            window.removeEventListener("rotacomercial:outbox-changed", carregarLocal);
+        };
+    }, [dataString, userId]);
+
     // Dicionário de clientes para consulta imediata por ID
     const clientesMap = useMemo(
-        () => new Map(initialClientes.map((c) => [c.id, c])),
-        [initialClientes]
+        () => new Map(clientesList.map((c) => [c.id, c])),
+        [clientesList]
     );
 
     // Clientes planejados na data de hoje
     const clientesPlanejadosIds = new Set(planejamentoList.map((p) => p.cliente_id));
 
     // Clientes disponíveis para adicionar (não planejados hoje)
-    const clientesDisponiveis = initialClientes.filter(
+    const clientesDisponiveis = clientesList.filter(
         (c) => !clientesPlanejadosIds.has(c.id)
     );
 
@@ -91,32 +137,32 @@ export default function PlanejamentoClient({
             ? Math.max(...planejamentoList.map((p) => p.ordem))
             : 0) + 1;
 
-        const { data, error } = await supabase
-            .from("planejamento")
-            .insert({
-                id: crypto.randomUUID(),
-                user_id: userId,
-                cliente_id: clienteId,
-                data: dataString,
-                ordem: nextOrdem,
-                status: "planejado",
-            })
-            .select()
-            .single();
+        const now = new Date().toISOString();
+        const novoItem: PlanejamentoItem = {
+            id: crypto.randomUUID(),
+            user_id: userId,
+            cliente_id: clienteId,
+            data: dataString,
+            ordem: nextOrdem,
+            status: "planejado",
+            version: 1,
+            updated_at: now,
+        };
 
-        if (error) {
-            console.error("Erro ao adicionar cliente ao planejamento:", error);
-            setGlobalErro("Erro ao adicionar cliente. Tente novamente.");
+        try {
+            await queueEntityMutation({
+                store: "planejamento",
+                entityType: "planejamento",
+                entity: novoItem,
+                operation: "planejamento.create",
+                payload: { ...novoItem, created_at: now },
+            });
+        } catch (error) {
+            console.error("Erro ao salvar planejamento localmente:", error);
+            setGlobalErro("Erro ao salvar a rota neste dispositivo.");
             setActionLoading(null);
             return;
         }
-
-        const novoItem: PlanejamentoItem = {
-            id: data.id,
-            cliente_id: data.cliente_id,
-            ordem: data.ordem,
-            status: data.status,
-        };
 
         setPlanejamentoList((prev) => [...prev, novoItem].sort((a, b) => a.ordem - b.ordem));
         setActionLoading(null);
@@ -128,23 +174,19 @@ export default function PlanejamentoClient({
         setActionLoading(`remove-${item.id}`);
         setGlobalErro(null);
 
-        const { data: rotaEstado, error: versaoError } = await supabase
-            .from("rota_estado")
-            .select("version")
-            .eq("data", dataString)
-            .single();
-
-        const { error } = versaoError || !rotaEstado
-            ? { error: versaoError ?? new Error("Versão da rota indisponível") }
-            : await supabase.rpc("remover_planejamento", {
-                p_operation_id: crypto.randomUUID(),
-                p_planejamento_id: item.id,
-                p_expected_version: rotaEstado.version,
+        try {
+            const routeVersion = await getRouteVersion();
+            await queueEntityDelete({
+                store: "planejamento",
+                entityType: "planejamento",
+                entity: { ...item, user_id: userId },
+                operation: "planejamento.remove",
+                payload: { expected_version: routeVersion, data: dataString },
+                baseVersion: routeVersion,
             });
-
-        if (error) {
-            console.error("Erro ao remover do planejamento:", error);
-            setGlobalErro("Erro ao remover da rota. Tente novamente.");
+        } catch (error) {
+            console.error("Erro ao remover planejamento localmente:", error);
+            setGlobalErro("Erro ao salvar a remoção neste dispositivo.");
             setActionLoading(null);
             return;
         }
@@ -176,31 +218,34 @@ export default function PlanejamentoClient({
         const novaLista = [...planejamentoList];
         [novaLista[index - 1], novaLista[index]] = [itemA, itemB];
 
-        const { data: rotaEstado, error: versaoError } = await supabase
-            .from("rota_estado")
-            .select("version")
-            .eq("data", dataString)
-            .single();
-
-        const { error } = versaoError || !rotaEstado
-            ? { error: versaoError ?? new Error("Versão da rota indisponível") }
-            : await supabase.rpc("reordenar_rota", {
-                p_operation_id: crypto.randomUUID(),
-                p_data: dataString,
-                p_expected_version: rotaEstado.version,
-                p_ordered_ids: novaLista.map((item) => item.id),
+        const listaAtualizada = novaLista.map((item, itemIndex) => ({
+            ...item,
+            ordem: itemIndex + 1,
+            updated_at: new Date().toISOString(),
+        }));
+        try {
+            const routeVersion = await getRouteVersion();
+            await queueRouteMutation({
+                store: "planejamento",
+                entityType: "planejamento",
+                entity: { ...itemA, user_id: userId },
+                entities: listaAtualizada,
+                operation: "planejamento.reorder",
+                payload: {
+                    data: dataString,
+                    expected_version: routeVersion,
+                    ordered_ids: listaAtualizada.map((item) => item.id),
+                },
+                baseVersion: routeVersion,
             });
-
-        if (error) {
-            console.error("Erro ao reordenar no Supabase:", error);
-            setGlobalErro("Erro ao reordenar rota. Tente novamente.");
+        } catch (error) {
+            console.error("Erro ao reordenar localmente:", error);
+            setGlobalErro("Erro ao salvar a nova ordem neste dispositivo.");
             setActionLoading(null);
             return;
         }
 
-        setPlanejamentoList(
-            novaLista.map((item, itemIndex) => ({ ...item, ordem: itemIndex + 1 }))
-        );
+        setPlanejamentoList(listaAtualizada);
         setActionLoading(null);
         router.refresh();
     }
@@ -218,31 +263,34 @@ export default function PlanejamentoClient({
         const novaLista = [...planejamentoList];
         [novaLista[index], novaLista[index + 1]] = [itemB, itemA];
 
-        const { data: rotaEstado, error: versaoError } = await supabase
-            .from("rota_estado")
-            .select("version")
-            .eq("data", dataString)
-            .single();
-
-        const { error } = versaoError || !rotaEstado
-            ? { error: versaoError ?? new Error("Versão da rota indisponível") }
-            : await supabase.rpc("reordenar_rota", {
-                p_operation_id: crypto.randomUUID(),
-                p_data: dataString,
-                p_expected_version: rotaEstado.version,
-                p_ordered_ids: novaLista.map((item) => item.id),
+        const listaAtualizada = novaLista.map((item, itemIndex) => ({
+            ...item,
+            ordem: itemIndex + 1,
+            updated_at: new Date().toISOString(),
+        }));
+        try {
+            const routeVersion = await getRouteVersion();
+            await queueRouteMutation({
+                store: "planejamento",
+                entityType: "planejamento",
+                entity: { ...itemA, user_id: userId },
+                entities: listaAtualizada,
+                operation: "planejamento.reorder",
+                payload: {
+                    data: dataString,
+                    expected_version: routeVersion,
+                    ordered_ids: listaAtualizada.map((item) => item.id),
+                },
+                baseVersion: routeVersion,
             });
-
-        if (error) {
-            console.error("Erro ao reordenar no Supabase:", error);
-            setGlobalErro("Erro ao reordenar rota. Tente novamente.");
+        } catch (error) {
+            console.error("Erro ao reordenar localmente:", error);
+            setGlobalErro("Erro ao salvar a nova ordem neste dispositivo.");
             setActionLoading(null);
             return;
         }
 
-        setPlanejamentoList(
-            novaLista.map((item, itemIndex) => ({ ...item, ordem: itemIndex + 1 }))
-        );
+        setPlanejamentoList(listaAtualizada);
         setActionLoading(null);
         router.refresh();
     }

@@ -60,7 +60,7 @@ export default async function ClientesPage() {
                         Não foi possível carregar os clientes.
                     </div>
                 ) : (
-                    <ClientesClient clientes={clientes ?? []} />
+                    <ClientesClient clientes={clientes ?? []} userId={user.id} />
                 )}
             </div>
         </main>

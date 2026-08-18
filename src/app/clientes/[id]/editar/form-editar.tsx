@@ -3,9 +3,14 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { queueEntityMutation } from "@/lib/offline/mutations";
 
 interface Cliente {
     id: string;
+    user_id: string;
+    version: number;
+    created_at: string;
+    updated_at: string;
     codigo: string | null;
     nome: string;
     nome_fantasia: string | null;
@@ -245,9 +250,10 @@ export function FormEditarCliente({ cliente }: { cliente: Cliente }) {
         const supabase = createClient();
 
         const {
-            data: { user },
+            data: { session },
             error: userError,
-        } = await supabase.auth.getUser();
+        } = await supabase.auth.getSession();
+        const user = session?.user;
 
         if (userError || !user) {
             setErro("Sua sessão expirou. Entre novamente.");
@@ -255,9 +261,7 @@ export function FormEditarCliente({ cliente }: { cliente: Cliente }) {
             return;
         }
 
-        const { error } = await supabase
-            .from("clientes")
-            .update({
+        const patch = {
                 codigo: codigo.trim() || null,
                 nome: nome.trim(),
                 nome_fantasia: nomeFantasia.trim() || null,
@@ -277,12 +281,25 @@ export function FormEditarCliente({ cliente }: { cliente: Cliente }) {
                 localizacao_atualizada_em: localizacaoAtualizadaEm,
                 geocodificacao_precisao: geocodificacaoPrecisao,
                 geocodificacao_provider: geocodificacaoProvider,
-            })
-            .eq("id", cliente.id);
+        };
 
-        if (error) {
-            console.error("Erro ao atualizar cliente:", error);
-            setErro("Não foi possível atualizar o cliente. Tente novamente.");
+        try {
+            await queueEntityMutation({
+                store: "clientes",
+                entityType: "cliente",
+                entity: {
+                    ...cliente,
+                    ...patch,
+                    user_id: user.id,
+                    updated_at: new Date().toISOString(),
+                },
+                operation: "cliente.update",
+                payload: { patch },
+                baseVersion: cliente.version,
+            });
+        } catch (error) {
+            console.error("Erro ao atualizar cliente localmente:", error);
+            setErro("Não foi possível salvar a alteração neste dispositivo.");
             setLoading(false);
             return;
         }

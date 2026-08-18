@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { queueEntityMutation } from "@/lib/offline/mutations";
 
 export default function NovoClientePage() {
   const router = useRouter();
@@ -50,9 +51,10 @@ export default function NovoClientePage() {
     const supabase = createClient();
 
     const {
-      data: { user },
+      data: { session },
       error: userError,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getSession();
+    const user = session?.user;
 
     if (userError || !user) {
       setErro("Sua sessão expirou. Entre novamente.");
@@ -60,7 +62,7 @@ export default function NovoClientePage() {
       return;
     }
 
-    const { error } = await supabase.from("clientes").insert({
+    const cliente = {
       id: crypto.randomUUID(),
       user_id: user.id,
       codigo: codigo.trim() || null,
@@ -76,11 +78,28 @@ export default function NovoClientePage() {
       pais: pais.trim().toUpperCase() || "BR",
       telefone: telefone.trim() || null,
       observacoes: observacoes.trim() || null,
-    });
+      latitude: null,
+      longitude: null,
+      localizacao_origem: null,
+      localizacao_atualizada_em: null,
+      geocodificacao_precisao: null,
+      geocodificacao_provider: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      version: 1,
+    };
 
-    if (error) {
-      console.error("Erro ao cadastrar cliente:", error);
-      setErro("Não foi possível cadastrar o cliente. Tente novamente.");
+    try {
+      await queueEntityMutation({
+        store: "clientes",
+        entityType: "cliente",
+        entity: cliente,
+        operation: "cliente.create",
+        payload: cliente,
+      });
+    } catch (error) {
+      console.error("Erro ao salvar cliente localmente:", error);
+      setErro("Não foi possível salvar o cliente neste dispositivo.");
       setLoading(false);
       return;
     }

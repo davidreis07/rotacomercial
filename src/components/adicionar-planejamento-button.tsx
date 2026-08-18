@@ -3,6 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getUserEntities } from "@/lib/offline/db";
+import { queueEntityMutation } from "@/lib/offline/mutations";
+import type { LocalEntity } from "@/lib/offline/types";
+
+type LocalPlanejamento = LocalEntity & { data: string };
 
 type Props = {
     clienteId: string;
@@ -25,9 +30,10 @@ export function AdicionarPlanejamentoButton({
         const supabase = createClient();
 
         const {
-            data: { user },
+            data: { session },
             error: userError,
-        } = await supabase.auth.getUser();
+        } = await supabase.auth.getSession();
+        const user = session?.user;
 
         if (userError || !user) {
             setErro("Sessão expirada.");
@@ -35,32 +41,34 @@ export function AdicionarPlanejamentoButton({
             return;
         }
 
-        const { count, error: countError } = await supabase
-            .from("planejamento")
-            .select("*", { count: "exact", head: true })
-            .eq("data", data);
-
-        if (countError) {
-            setErro(countError.message);
-            setLoading(false);
-            return;
-        }
-
-        const { error } = await supabase
-            .from("planejamento")
-            .insert({
+        try {
+            const planejamento = await getUserEntities<LocalPlanejamento>(
+                "planejamento",
+                user.id
+            );
+            const ordem = planejamento.filter((item) => item.data === data).length + 1;
+            const now = new Date().toISOString();
+            const item = {
                 id: crypto.randomUUID(),
                 user_id: user.id,
                 cliente_id: clienteId,
                 data,
-                ordem: (count ?? 0) + 1,
+                ordem,
                 status: "planejado",
+                version: 1,
+                created_at: now,
+                updated_at: now,
+            };
+            await queueEntityMutation({
+                store: "planejamento",
+                entityType: "planejamento",
+                entity: item,
+                operation: "planejamento.create",
+                payload: item,
             });
-
-        if (error) {
-            console.error("Erro ao adicionar ao planejamento:", error);
-
-            setErro(`${error.message} (${error.code})`);
+        } catch (error) {
+            console.error("Erro ao salvar planejamento localmente:", error);
+            setErro("Não foi possível salvar o planejamento neste dispositivo.");
             setLoading(false);
             return;
         }

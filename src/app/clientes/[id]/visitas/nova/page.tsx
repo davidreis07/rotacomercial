@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { queueVisitMutation } from "@/lib/offline/mutations";
 
 export default function NovaVisitaPage() {
   const router = useRouter();
@@ -30,9 +31,10 @@ export default function NovaVisitaPage() {
     const supabase = createClient();
 
     const {
-      data: { user },
+      data: { session },
       error: userError,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getSession();
+    const user = session?.user;
 
     if (userError || !user) {
       setErro("Sua sessão expirou. Entre novamente.");
@@ -46,28 +48,33 @@ export default function NovaVisitaPage() {
       return;
     }
 
-    const { error } = await supabase.rpc(
-      "registrar_visita_e_concluir_planejamento",
-      {
-        p_operation_id: crypto.randomUUID(),
-        p_visita_id: crypto.randomUUID(),
-        p_cliente_id: clienteId,
-        p_visitado_em: new Date().toISOString(),
-        p_resultado: resultado.trim() || null,
-        p_necessidade: necessidade.trim() || null,
-        p_observacoes: observacoes.trim() || null,
-        p_planejamento_id:
-          origem === "planejamento" ? planejamentoId : null,
-      }
-    );
+    const visitaId = crypto.randomUUID();
+    const visitadoEm = new Date().toISOString();
+    const visita = {
+      id: visitaId,
+      user_id: user.id,
+      cliente_id: clienteId,
+      planejamento_id: origem === "planejamento" ? planejamentoId : null,
+      visitado_em: visitadoEm,
+      resultado: resultado.trim() || null,
+      necessidade: necessidade.trim() || null,
+      observacoes: observacoes.trim() || null,
+      created_at: visitadoEm,
+      updated_at: visitadoEm,
+      version: 1,
+    };
 
-    if (error) {
-      console.error("Erro ao registrar visita:", error);
-
-      setErro(
-        `Erro: ${error.message} | Código: ${error.code}`
-      );
-
+    try {
+      await queueVisitMutation({
+        store: "visitas",
+        entityType: "visita",
+        entity: visita,
+        operation: "visita.create",
+        payload: visita,
+      });
+    } catch (error) {
+      console.error("Erro ao registrar visita localmente:", error);
+      setErro("Não foi possível salvar a visita neste dispositivo.");
       setLoading(false);
       return;
     }
